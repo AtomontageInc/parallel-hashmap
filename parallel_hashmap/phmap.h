@@ -3655,6 +3655,26 @@ public:
         return std::get<2>(res);
     }
 
+	// if map does not contains key, it is inserted and the mapped value is value-constructed
+	// with the provided arguments (if any), as with try_emplace.
+	// Subsequently, the lambda is called with the mapped value (either old, or new) and can
+	// update the mapped value. This whole operation happens under write lock protection.
+	// returns true if key was not already present, false otherwise.
+	// ---------------------------------------------------------------------------------------
+	template <class K = key_type, class F,  class... Args>
+	bool emplace_and(K&& k, F&& f, Args&&... args) {
+		typename Lockable::UniqueLock m;
+		auto res = this->find_or_prepare_insert(k, m);
+		typename Base::Inner *inner = std::get<0>(res);
+		if (std::get<2>(res))
+			inner->set_.emplace_at(std::get<1>(res), std::piecewise_construct,
+								   std::forward_as_tuple(std::forward<K>(k)),
+								   std::forward_as_tuple(std::forward<Args>(args)...));
+		auto it = this->iterator_at(inner, inner->set_.iterator_at(std::get<1>(res)));
+		std::forward<F>(f)(Policy::value(&*it));
+		return std::get<2>(res);
+	}
+
     // ----------- end of phmap extensions --------------------------
 
     template <class K = key_type, class P = Policy, K* = nullptr>
